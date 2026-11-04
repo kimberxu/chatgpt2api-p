@@ -21,8 +21,17 @@ def create_storage_backend(data_dir: Path) -> StorageBackend:
     - GIT_BRANCH: Git 分支 (默认 main)
     - GIT_FILE_PATH: Git 仓库中的文件路径 (默认 accounts.json)
     """
-    backend_type = os.getenv("STORAGE_BACKEND", "json").lower().strip()
+    backend_type = os.getenv("STORAGE_BACKEND", "").lower().strip()
     
+    # 智能探测：如果未显式设置 STORAGE_BACKEND，但存在 SQLite 数据库文件或指定了 DATABASE_URL
+    if not backend_type:
+        legacy_db = data_dir / "database.db"
+        accounts_db = data_dir / "accounts.db"
+        if os.getenv("DATABASE_URL") or legacy_db.is_file() or accounts_db.is_file():
+            backend_type = "sqlite"
+        else:
+            backend_type = "json"
+
     print(f"[storage] Initializing storage backend: {backend_type}")
     
     if backend_type == "json":
@@ -37,9 +46,12 @@ def create_storage_backend(data_dir: Path) -> StorageBackend:
         database_url = os.getenv("DATABASE_URL", "").strip()
         
         if not database_url:
-            # 如果没有指定 DATABASE_URL，使用本地 SQLite
-            database_url = f"sqlite:///{data_dir / 'accounts.db'}"
-            print(f"[storage] No DATABASE_URL provided, using local SQLite: {database_url}")
+            # 如果没有指定 DATABASE_URL，优先检测旧版 database.db，其次 accounts.db
+            if (data_dir / "database.db").is_file():
+                database_url = f"sqlite:///{data_dir / 'database.db'}"
+            else:
+                database_url = f"sqlite:///{data_dir / 'accounts.db'}"
+            print(f"[storage] Using local SQLite: {database_url}")
         else:
             print(f"[storage] Using database storage: {_mask_password(database_url)}")
         
