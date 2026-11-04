@@ -1,0 +1,58 @@
+name: Build and Release Frontend
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'web/**'
+      - 'VERSION'
+      - 'CHANGELOG.md'
+      - '.github/workflows/build-frontend.yml'
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Next.js Static Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: npm install
+
+      - name: Build Next.js export
+        working-directory: ./web
+        run: |
+          VERSION=$(cat ../VERSION 2>/dev/null || echo "1.0.0")
+          NEXT_PUBLIC_APP_VERSION="$VERSION" npm run build
+
+      - name: Package frontend into dist.tar.gz
+        run: |
+          mkdir -p dist
+          cp -r web/out/* dist/
+          tar -czf dist.tar.gz dist
+
+      - name: Release dist.tar.gz
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frontend-latest
+          name: "Frontend Static Assets (Latest)"
+          body: "Automated Next.js static export for chatgpt2api web frontend."
+          files: dist.tar.gz
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
